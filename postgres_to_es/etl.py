@@ -17,9 +17,6 @@ class ETLManager:
         self.table_name = table_name
 
     def start(self):
-        # filmwork -> merger -> transform -> loader
-        # person -> enricher -> merger -> transform -> loader
-        # genre -> enricher -> merger -> transform -> loader
         if self.table_name == 'filmwork':
 
             loader = loader_coroutine()
