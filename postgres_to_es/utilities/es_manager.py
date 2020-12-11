@@ -5,10 +5,9 @@ from typing import List
 from urllib.parse import urljoin
 from .decorators import backoff
 import requests
+import settings
 
 logger = logging.getLogger(__name__)
-
-basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 def is_index_created(url: str, index_name: str) -> bool:
@@ -33,7 +32,7 @@ def delete_es_index(url: str, index_name: str):
 @backoff()
 def create_es_index(url: str, index_name: str) -> None:
 
-    with open(os.path.join(basedir, 'es_schema.json'), 'r') as fp:
+    with open(os.path.join(settings.BASEDIR, 'es_schema.json'), 'r') as fp:
         schema = json.load(fp)
 
     if not is_index_created(url, index_name):

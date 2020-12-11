@@ -4,8 +4,8 @@ import logging
 
 
 # Load enviroment variables
-basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '.env_local'))
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(BASEDIR, '.env_local'))
 
 
 # Constans

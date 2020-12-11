@@ -13,7 +13,6 @@ from . import (JsonFileStorage, Movie, Person, State, backoff, coroutine,
 
 import settings
 
-basedir = os.path.abspath(os.path.dirname(__file__))
 
 @backoff()
 def get_pg_conn(dsn: dict) -> _connection:
@@ -26,7 +25,7 @@ def producer_generator(target: Coroutine, table_name: str):
     cursor.arraysize = settings.LIMIT
 
     storage = JsonFileStorage(os.path.join(
-        basedir, f'{table_name}_state.json'))
+        settings.BASEDIR, f'{table_name}_state.json'))
     state_manager = State(storage=storage)
 
     current_state = state_manager.state.get(table_name)
