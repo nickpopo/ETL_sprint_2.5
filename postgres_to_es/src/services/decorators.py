@@ -1,8 +1,6 @@
-from functools import wraps
-import psycopg2
-from time import sleep
 import logging
-
+from functools import wraps
+from time import sleep
 
 logger = logging.getLogger(__name__)
 

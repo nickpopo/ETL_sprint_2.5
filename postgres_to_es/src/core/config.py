@@ -1,10 +1,12 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import logging
 
 
-# Load enviroment variables
-BASEDIR = os.path.abspath(os.path.dirname(__file__))
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASEDIR = Path(__file__).resolve(strict=True).parent.parent
+
 load_dotenv(os.path.join(BASEDIR, '.env_local'))
 
 

@@ -1,48 +1,38 @@
-import logging
-import os
-from dataclasses import asdict, dataclass
-from typing import Coroutine, Generator, Iterable, List, Optional
+from dataclasses import asdict
+from datetime import datetime
+from typing import Coroutine
 
-import psycopg2
-from dotenv import load_dotenv
+from core import config
+from db.elastic import ESManager
+from models import Movie, Person
 from psycopg2.extensions import connection as _connection
-from psycopg2.extras import DictCursor
 
-from . import (JsonFileStorage, Movie, Person, State, backoff, coroutine,
-               create_es_index, dispatcher, get_es_loader)
+from services.decorators import coroutine
+from services.helpers import dispatcher
+from services.state_manager import BaseStorage, State
 
-import settings
+__all__ = ['producer_generator',
+           'enricher_coroutine',
+           'merger_coroutine',
+           'transform_coroutine',
+           'loader_coroutine',
+           ]
 
 
-@backoff()
-def get_pg_conn(dsn: dict) -> _connection:
-    return psycopg2.connect(**dsn, cursor_factory=DictCursor)
-
-
-def producer_generator(target: Coroutine, table_name: str):
-    pg_conn = get_pg_conn(settings.DSN)
+def producer_generator(target: Coroutine, *, table_name: str, pg_conn: _connection, storage: BaseStorage):
     cursor = pg_conn.cursor()
-    cursor.arraysize = settings.LIMIT
+    cursor.arraysize = config.LIMIT
 
-    storage = JsonFileStorage(os.path.join(
-        settings.BASEDIR, f'{table_name}_state.json'))
     state_manager = State(storage=storage)
+    default_date = str(datetime(year=1700, month=1, day=1))
+    current_state = state_manager.state.get(table_name, default_date)
 
-    current_state = state_manager.state.get(table_name)
-
-    if not current_state:
-        sql = f"""
-                SELECT id, updated_at
-                FROM content.{table_name}
-                ORDER BY updated_at
-                """
-    else:
-        sql = f"""
-                SELECT id, updated_at
-                FROM content.{table_name}
-                WHERE updated_at >= %s
-                ORDER BY updated_at
-                """
+    sql = f"""
+            SELECT id, updated_at
+            FROM content.{table_name}
+            WHERE updated_at >= %s
+            ORDER BY updated_at
+            """
 
     cursor.execute(sql, (current_state,))
 
@@ -58,15 +48,11 @@ def producer_generator(target: Coroutine, table_name: str):
         state_manager.set_state(
             key=table_name, value=str(batch_result[-1]['updated_at']))
 
-    cursor.close()
-    pg_conn.close()
-
 
 @coroutine
-def enricher_coroutine(target: Coroutine, m2m_table_name: str, column_name: str):
-    pg_conn = get_pg_conn(settings.DSN)
+def enricher_coroutine(target: Coroutine, *, m2m_table_name: str, column_name: str, pg_conn: _connection):
     cursor = pg_conn.cursor()
-    cursor.arraysize = settings.LIMIT
+    cursor.arraysize = config.LIMIT
 
     while ids_list := (yield):
         sql = f"""
@@ -84,13 +70,9 @@ def enricher_coroutine(target: Coroutine, m2m_table_name: str, column_name: str)
 
             target.send(ids_list)
 
-    cursor.close()
-    pg_conn.close()
-
 
 @coroutine
-def merger_coroutine(target: Coroutine) -> None:
-    pg_conn = get_pg_conn(settings.DSN)
+def merger_coroutine(target: Coroutine, *, pg_conn: _connection) -> None:
     cursor = pg_conn.cursor()
 
     while ids_list := (yield):
@@ -113,9 +95,6 @@ def merger_coroutine(target: Coroutine) -> None:
 
         raw_rows = cursor.fetchall()
         target.send(raw_rows)
-
-    cursor.close()
-    pg_conn.close()
 
 
 @coroutine
@@ -141,11 +120,8 @@ def transform_coroutine(target):
 
 
 @coroutine
-def loader_coroutine():
-    es_loader = get_es_loader(
-        url=settings.ES_URL)
-    create_es_index(url=settings.ES_URL, index_name=settings.ES_INDEX_NAME)
+def loader_coroutine(es_manager: ESManager, index_name: str):
     while movies_list := (yield):
         movies_list = (asdict(movie) for movie in movies_list)
-        es_loader.load_to_es(
-            records=movies_list, index_name=settings.ES_INDEX_NAME)
+        es_manager.load_to_es(
+            records=movies_list, index_name=index_name)
